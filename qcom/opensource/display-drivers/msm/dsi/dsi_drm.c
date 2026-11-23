@@ -1255,8 +1255,41 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 		goto end;
 	}
 
+#ifdef MI_DISPLAY_MODIFY
+	{
+		bool has_ddic_auto_1hz = false;
+		bool had_preferred_120 = false;
+		int added_count = 0;
+
+		for (i = 0; i < count; i++) {
+			if (modes[i].mi_timing.ddic_mode == DDIC_MODE_AUTO &&
+			    modes[i].mi_timing.ddic_min_refresh_rate == 1)
+				has_ddic_auto_1hz = true;
+			if (modes[i].timing.refresh_rate == 120 &&
+			    (modes[i].is_preferred ||
+			     (display->cmdline_timing == NO_OVERRIDE && modes[i].mode_idx == 0)))
+				had_preferred_120 = true;
+		}
+
+		for (i = 0; i < count; i++) {
+			struct drm_display_mode *m;
+			bool is_ddic_auto_1hz =
+				(modes[i].mi_timing.ddic_mode == DDIC_MODE_AUTO &&
+				 modes[i].mi_timing.ddic_min_refresh_rate == 1);
+
+			if (has_ddic_auto_1hz) {
+				if (modes[i].mi_timing.ddic_mode != DDIC_MODE_NORMAL) {
+					if (!is_ddic_auto_1hz)
+						continue;
+				} else if (modes[i].timing.refresh_rate == 120 ||
+					   modes[i].timing.refresh_rate < 60) {
+					continue;
+				}
+			}
+#else
 	for (i = 0; i < count; i++) {
 		struct drm_display_mode *m;
+#endif
 
 		memset(&drm_mode, 0x0, sizeof(drm_mode));
 		dsi_convert_to_drm_mode(&modes[i], &drm_mode);
@@ -1279,8 +1312,20 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 			/* set the first mode in device tree list as preferred */
 			m->type |= DRM_MODE_TYPE_PREFERRED;
 		}
+#ifdef MI_DISPLAY_MODIFY
+		if (has_ddic_auto_1hz && is_ddic_auto_1hz && had_preferred_120)
+			m->type |= DRM_MODE_TYPE_PREFERRED;
+#endif
 		drm_mode_probed_add(connector, m);
+#ifdef MI_DISPLAY_MODIFY
+		added_count++;
 	}
+	if (has_ddic_auto_1hz && added_count > 0)
+		count = added_count;
+	}
+#else
+	}
+#endif
 
 	rc = dsi_drm_update_edid_name(&edid, display->panel->name);
 	if (rc) {
