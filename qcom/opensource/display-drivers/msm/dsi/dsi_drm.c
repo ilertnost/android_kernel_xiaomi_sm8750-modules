@@ -1260,6 +1260,7 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 		bool has_ddic_auto_1hz = false;
 		bool had_preferred_120 = false;
 		int added_count = 0;
+		u32 j;
 
 		for (i = 0; i < count; i++) {
 			if (modes[i].mi_timing.ddic_mode == DDIC_MODE_AUTO &&
@@ -1284,6 +1285,26 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 				} else if (modes[i].timing.refresh_rate == 120 ||
 					   modes[i].timing.refresh_rate < 60) {
 					continue;
+				}
+
+				/*
+				 * Prefer an auto mode over a fixed mode at the same
+				 * refresh rate. This is what lets 60 Hz keep the DDIC
+				 * in auto mode instead of dropping to the fixed 60 Hz
+				 * timing.
+				 */
+				if (modes[i].mi_timing.ddic_mode == DDIC_MODE_NORMAL &&
+				    modes[i].timing.refresh_rate >= 60 &&
+				    modes[i].timing.refresh_rate < 120) {
+					for (j = 0; j < count; j++) {
+						if (modes[j].mi_timing.ddic_mode == DDIC_MODE_AUTO &&
+						    modes[j].mi_timing.ddic_min_refresh_rate == 1 &&
+						    modes[j].timing.refresh_rate ==
+							modes[i].timing.refresh_rate)
+							break;
+					}
+					if (j < count)
+						continue;
 				}
 			}
 #else
@@ -1313,7 +1334,8 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 			m->type |= DRM_MODE_TYPE_PREFERRED;
 		}
 #ifdef MI_DISPLAY_MODIFY
-		if (has_ddic_auto_1hz && is_ddic_auto_1hz && had_preferred_120)
+		if (has_ddic_auto_1hz && is_ddic_auto_1hz && had_preferred_120 &&
+		    modes[i].timing.refresh_rate == 120)
 			m->type |= DRM_MODE_TYPE_PREFERRED;
 #endif
 		drm_mode_probed_add(connector, m);
