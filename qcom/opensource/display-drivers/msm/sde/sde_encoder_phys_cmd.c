@@ -576,9 +576,17 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 
 	_sde_encoder_phys_cmd_process_sim_qsync_event(phys_enc, SDE_SIM_QSYNC_EVENT_TE_TRIGGER);
 
-	if (phys_enc->parent_ops.handle_vblank_virt)
-		phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
-			phys_enc);
+	if (phys_enc->parent_ops.handle_vblank_virt) {
+		ktime_t now = ktime_get();
+		int vrefresh = drm_mode_vrefresh(&phys_enc->cached_mode);
+
+		if (vrefresh != 60 ||
+		    ktime_us_delta(now, cmd_enc->last_vblank_timestamp) >= 12500) {
+			cmd_enc->last_vblank_timestamp = now;
+			phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
+				phys_enc);
+		}
+	}
 
 	atomic_add_unless(&cmd_enc->pending_vblank_cnt, -1, 0);
 	wake_up_all(&cmd_enc->pending_vblank_wq);

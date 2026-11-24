@@ -2208,7 +2208,7 @@ int mi_dsi_set_switch_cmd_before(struct dsi_panel *panel, int fps_mode)
 		return rc;
 	}
 
-	if (last_fps == 120 && ((last_fps_mode == DDIC_MODE_AUTO) || (last_fps_mode == DDIC_MODE_QSYNC))) {
+	if ((last_fps_mode == DDIC_MODE_AUTO) || (last_fps == 120 && (last_fps_mode == DDIC_MODE_QSYNC))) {
 		mi_dsi_update_switch_cmd_O3(panel, DSI_CMD_SET_TIMING_SWITCH_FROM_AUTO_UPDATE,
 					DSI_CMD_SET_MI_TIMING_SWITCH_FROM_AUTO);
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_MI_TIMING_SWITCH_FROM_AUTO, false);
