@@ -8219,6 +8219,28 @@ static int cam_ife_mgr_pause_hw(struct cam_ife_hw_mgr_ctx *ctx)
 	return cam_ife_mgr_bw_control(ctx, CAM_ISP_BW_CONTROL_EXCLUDE);
 }
 
+static bool cam_ife_mgr_cdm_in_use_by_other_ctx(
+	struct cam_ife_hw_mgr *ife_hw_mgr,
+	struct cam_ife_hw_mgr_ctx *ctx)
+{
+	int i;
+
+	if (ctx->cdm_hw_idx < 0)
+		return false;
+
+	for (i = 0; i < CAM_IFE_CTX_MAX; i++) {
+		struct cam_ife_hw_mgr_ctx *other = &ife_hw_mgr->ctx_pool[i];
+
+		if (other == ctx || !other->flags.ctx_in_use)
+			continue;
+
+		if (other->cdm_hw_idx == ctx->cdm_hw_idx)
+			return true;
+	}
+
+	return false;
+}
+
 /* entry function: stop_hw */
 static int cam_ife_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 {
@@ -8278,11 +8300,22 @@ static int cam_ife_mgr_stop_hw(void *hw_mgr_priv, void *stop_hw_args)
 		}
 	}
 
-	rc = cam_cdm_reset_hw(ctx->cdm_handle);
-	if (rc) {
-		CAM_WARN(CAM_ISP, "CDM: %u reset failed rc: %d in ctx: %u",
-			ctx->cdm_id, rc, ctx->ctx_index);
-		rc = 0;
+	/*
+	 * Resetting the shared CDM hardware while another context is still
+	 * streaming drops that context's pending BL callbacks and can hang the
+	 * camera pipeline. Reset only when this is the last context on the CDM.
+	 */
+	if (cam_ife_mgr_cdm_in_use_by_other_ctx(ctx->hw_mgr, ctx)) {
+		CAM_DBG(CAM_ISP,
+			"Skip CDM HW reset for ctx: %u, CDM hw idx: %d is shared",
+			ctx->ctx_index, ctx->cdm_hw_idx);
+	} else {
+		rc = cam_cdm_reset_hw(ctx->cdm_handle);
+		if (rc) {
+			CAM_WARN(CAM_ISP, "CDM: %u reset failed rc: %d in ctx: %u",
+				ctx->cdm_id, rc, ctx->ctx_index);
+			rc = 0;
+		}
 	}
 
 	/*

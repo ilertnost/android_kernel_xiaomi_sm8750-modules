@@ -8537,8 +8537,13 @@ static int cam_ife_csid_ver2_drv_config(
 
 	cfg0_val = drv_config->drv_en << csid_reg->cmn_reg->drv_en_shift;
 
-	/* Configure DRV RUP EN for init request, one time */
-	if (drv_config->is_init_config) {
+	/*
+	 * Configure the DRV RUP EN for the init request, one time. The first
+	 * DRV config can reach the CSID before the init-config packet when the
+	 * CSID is acquired after that packet, so treat the first DRV config as
+	 * the init config as well.
+	 */
+	if (drv_config->is_init_config || !csid_hw->drv_init_done) {
 		if (csid_hw->path_res[CAM_IFE_PIX_PATH_RES_IPP].res_state >=
 			CAM_ISP_RESOURCE_STATE_RESERVED) {
 			cfg1_val = csid_reg->cmn_reg->drv_rup_en_val_map[CAM_IFE_PIX_PATH_RES_IPP];
